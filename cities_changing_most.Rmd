@@ -1,0 +1,579 @@
+---
+title: "Cities With the Most Change \n From Start of Data to Present"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Introduction
+
+I've taken everything we have trendlines for on our website and produced graphs that show Louisville and the two cities that experienced the most change (in opposite directions) in the time period for which we have data. In the legends by "Max:" I mean the city with the largest positive change, and by "Min:" either the city with the least change or the biggest negative change. (If Louisville is one of the cities with the most change then only two cities instead of three will show up on the graph). 
+
+The table of contents to the left will expand to show the indicators under the deep drivers and is clickable to jump to sections.
+
+Here are a few that I thought might be of interest for discussion or further exploration:
+
+- Jobs: Unemployment
+    - Birmingham and Grand Rapids have switched places
+- Education: Associate's or higher 25-64
+    - 2015 was the year of a really favorable education sample for us
+    - We appear to have had the largest increase of any of our peers, but should check 2016 data
+- Education: Percent in high wage occupations
+    - The comparison to Indianapolis might be interesting
+- QoP: Disconnected Youth
+    - Indianapolis is doing well here despite increases in child poverty
+
+_Overall, I see a story of divergence, with the cities that improved the most on metrics often being the ones that started out in the best place. (I don't have this quantified yet, but think that could be an interesting follow-up.)_
+
+
+```{r, echo = FALSE}
+#knitr options
+knitr::opts_chunk$set(fig.width = 9, fig.height = 6, echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(readxl)
+library(showtext)
+library(reshape2)
+```
+
+```{r}
+jobs <- read_excel("glp_codebook.xlsx", sheet = "Jobs County")
+jobs$income_inequality <- as.numeric(jobs$income_inequality)
+```
+
+```{r}
+#Basic trendline graph
+graph_trendline<-function(df,var, plot_title="",y_title = "", peers = "Current", 
+                          caption_text = "", subtitle_text = "",
+                          newest_year = 2015, oldest_year = 2005,
+                          xmin = 2005, xmax = 2015,
+                          break_settings = ""){
+  
+  #create a new variable to use var with the '$' operator
+  df$var <- df[[var]]
+
+  #subset to peers
+  if(peers=="Current"){
+    df <- subset(df, current == 1)
+  }
+  
+  if(peers=="Baseline"){
+    df <- subset(df, baseline == 1)
+  }
+  
+  #select vars needed
+  df = df %>% 
+    select(year, city, var) %>%
+    filter(year >= oldest_year & year <= newest_year)
+  
+  #calculate which peers had the biggest change
+  city_list <- df %>%
+    filter(year == newest_year | year == oldest_year) %>%
+    spread(year, var) 
+  
+  city_list$change <- city_list[ ,3] - city_list[ ,2] #hard coding by column position as year will create different var names
+
+  city_list <- city_list %>%
+    filter(change == max(change) | change == min(change) |  city == "Louisville") %>%
+     mutate(category = case_when(
+      change == max(change) ~ paste0("Max: ", city),
+      change == min(change) ~ paste0("Min: ", city),
+      city == "Louisville" ~ paste0("", city),
+      TRUE ~ ""
+    ))  %>%
+    select(city, category)
+    
+  df <- df %>%
+    filter(city %in% city_list$city) %>%
+    left_join(city_list, by = "city")
+  
+  #set x-axis labels based on break_settings parameter
+  if(break_settings == ""){
+    break_settings = seq(xmin, xmax, 2)
+  }
+  
+  #initial line plot
+  p <- ggplot(data = df,aes(x = year, y = var, colour = category))+
+    geom_point(size = 1.8)+
+    geom_line(size = 1) + scale_colour_manual(values = c("blue", "darkgreen", "red"))
+  p <- p + theme_bw()
+  midpoint <- (max(df$var, na.rm = TRUE) + min(df$var, na.rm = TRUE))/2
+  border_space <- .1 * midpoint
+  p <- p + ylim(c(min(df$var, na.rm = TRUE) - border_space, max(df$var, na.rm=TRUE) + border_space))
+  p <- p + scale_x_continuous(limits = c(xmin, xmax), breaks = break_settings)
+  
+  #add remaining style and elements
+  p <- p + theme(text = element_text(family = "Museo Sans 300"),
+             legend.title=element_blank(),
+             legend.position = "left",
+             axis.text=element_text(size = 12, family = "Museo Sans 300"),
+             axis.ticks.y=element_blank(),
+             plot.title=element_text(size = 18, hjust=.5, family = "Museo Sans 300",
+                                     margin=margin(b = 10, unit="pt")),
+             legend.text=element_text(size = 12, family = "Museo Sans 300"),
+             plot.caption = element_text(family = "Museo Sans 300"),
+             plot.subtitle = element_text(family = "Museo Sans 300", hjust = 0.5))
+  p <- p + labs(title=plot_title,x="Year",
+            y=y_title, caption = caption_text, subtitle = subtitle_text)
+  p
+}
+```
+
+```{r}
+font_add("Museo Sans 300", "C:/Users/natek/studio_gdrive/GLP/fonts/MuseoSans_300.otf")
+font_add("Museo Sans Italic", "C:/Users/natek/studio_gdrive/GLP/fonts/MuseoSans_300_Italic.otf")
+showtext.auto()
+```
+
+
+
+#Jobs
+
+### Median Earnings
+```{r}
+graph_trendline(jobs, 
+                "median_earnings",
+                plot_title = "Median Earnings",
+                subtitle = "",
+                xmin = 2005,
+                xmax = 2015,
+                caption_text = "Source: Greater Louisville Project 
+                                Data from the American Community Survey, Table S2001")
+```
+
+
+### Median Household Income
+```{r}
+jobs$median_household_income <- as.numeric(jobs$median_household_income)
+graph_trendline(jobs, 
+                "median_household_income",
+                plot_title = "Median Household Income",
+                subtitle = "Annual",
+                xmin = 2005,
+                xmax = 2014,
+                newest_year = 2014,
+                caption_text = "Source: Greater Louisville Project 
+                                Data from the Federal Reserve via GeoFRED")
+```
+
+### Personal Income Per Capita
+```{r}
+graph_trendline(jobs, 
+                "personal_income_per_cap",
+                plot_title = "Per Capita Personal Income",
+                subtitle = "Annual",
+                xmin = 2005, 
+                xmax = 2015, 
+                caption_text = "Source: Greater Louisville Project 
+                                Data from the Federal Reserve via GeoFRED")
+```
+
+### Income Inequality
+```{r}
+graph_trendline(jobs, 
+                "income_inequality",
+                plot_title = "Income Inequality",
+                subtitle = "Mean income of top quintile divided by mean income of bottom quintile",
+                xmin = 2010, 
+                xmax = 2015, 
+                newest_year = 2015,
+                oldest_year = 2010,
+                caption_text = "Source: Greater Louisville Project 
+                                Data from the Federal Reserve via GeoFRED")
+```
+
+### Unemployment
+Birmingham and Grand Rapids have switched positions
+```{r}
+graph_trendline(jobs, 
+                "unemployment",
+                plot_title = "Unemployment",
+                subtitle = "Annual",
+                xmin = 2005, 
+                xmax = 2015,
+                caption_text = "Source: Greater Louisville Project 
+                                Data from the Federal Reserve via GeoFRED")
+```
+
+# Health
+
+```{r}
+health <- read_excel("glp_codebook.xlsx", sheet = "Health County")
+health$ss_est_per_10000 <- as.numeric(health$ss_est_per_10000)
+health$commute_time <- as.numeric(health$commute_time)
+health$child_per <- as.numeric(health$child_per)
+```
+
+### Social Support
+Membership Associations per 10,000 residents
+```{r}
+graph_trendline(
+  health,
+  var = 'ss_est_per_10000',
+  plot_title = "Social Support",
+  xmin = 2005,
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from CBP Statistics from US Census")
+```
+
+### Commute Time
+In minutes
+```{r}
+graph_trendline(
+  health,
+  var = 'commute_time',
+  plot_title = "Commute Time",
+  xmin = 2009,
+  xmax = 2015,
+  newest_year = 2015,
+  oldest_year = 2009,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the Federal Reserve via GeoFRED")
+```
+
+### Child Poverty
+```{r}
+graph_trendline(
+  health,
+  var = 'child_per',
+  plot_title = "Child Poverty",
+  xmin = 2005,
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from American Community Survey Table B17001")
+```
+
+# Education
+
+```{r}
+educ_data <- read_excel("glp_codebook.xlsx", sheet = "Edu County", col_types = c("text", "text", "text", "text", "text", 
+                                                                                 "numeric", "numeric", "numeric", "numeric",
+                                                                                 "numeric", "numeric", "numeric", "numeric",
+                                                                                 "numeric", "numeric", "numeric", "numeric",
+                                                                                 "numeric", "numeric", "numeric", "numeric",
+                                                                                 "numeric", "numeric"
+                                                                                 ))
+```
+
+### Under 5 Child Poverty
+```{r}
+graph_trendline(
+  educ_data, 
+  "under_5_per",
+  plot_title = "Children Under 5 in Poverty",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B17001")
+```
+
+### Five to 17 Child Poverty
+```{r}
+graph_trendline(
+  educ_data, 
+  "five_to_17_per", 
+  plot_title = "Children Ages 5 to 17 in Poverty",
+  xmin = 2005, 
+  xmax = 2015, 
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B17001")
+```
+
+### Child Poverty
+```{r}
+graph_trendline(
+  educ_data, 
+  "child_per",
+  plot_title = "Child Poverty", 
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B17001")
+```
+
+### Bachelor's by Race
+Shown for ages 25+ for comparison across races.
+```{r}
+graph_trendline(
+  educ_data, 
+  "bach_plus_per_all",
+  plot_title = "Bachelor's Degree or Higher, All Races",
+  xmin = 2005,
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15002")
+```
+
+```{r}
+graph_trendline(
+  educ_data,
+  "bach_plus_per_black",
+  plot_title = "Bachelor's Degree or Higher, Black",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15002B")
+```
+
+```{r}
+graph_trendline(
+  educ_data,
+  "bach_plus_per_hispanic",
+  plot_title = "Bachelor's Degree or Higher, Hispanic",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15002I")
+```
+
+```{r}
+graph_trendline(
+  educ_data, 
+  "bach_plus_per_white",
+  plot_title = "Bachelor's Degree or Higher, White",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15002A")
+```
+
+
+### Associate's 25 to 64
+```{r}
+graph_trendline(
+  educ_data,
+  "per_25_64_assoc_plus",
+  plot_title = "Associate's Degree or Higher, Ages 25-64",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Bachelor's 25 to 64
+```{r}
+graph_trendline(
+  educ_data,
+  "per_25_64_bach_plus",
+  plot_title = "Bachelor's Degree or Higher, Ages 25-64",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Graduate Degrees 25 to 64
+```{r}
+graph_trendline(
+  educ_data,
+  "per_25_64_grad",
+  plot_title = "Graduate Degree, Ages 25-64",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Associate's Degrees 25 to 34
+```{r}
+graph_trendline(
+  educ_data, 
+  "per_25_34_assoc_plus",
+  plot_title = "Associate's Degree or Higher, Ages 25-34",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Bachelor's Plus 25 to 34
+```{r}
+graph_trendline(
+  educ_data, 
+  "per_25_34_bach_plus",
+  plot_title = "Bachelor's Degree or Higher, Ages 25-34",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Graduate Degree 25 to 34
+```{r}
+graph_trendline(
+  educ_data, 
+  "per_25_34_grad",
+  plot_title = "Graduate Degree, Ages 25-34",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table B15001")
+```
+
+### Enrolled in preschool, ages 3-4
+```{r}
+graph_trendline(
+  educ_data, 
+  "enrolled_3_4",
+  plot_title = "Children ages 3 and 4 enrolled in preschool",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table S1401")
+```
+
+### Percent High Wage
+```{r}
+graph_trendline(
+  educ_data, 
+  "per_high_wage",
+  plot_title = "Population in High Wage Occupations",
+  xmin = 2005, 
+  xmax = 2015,
+  caption_text = "Source: Greater Louisville Project 
+                  Data from the American Community Survey, Table S2401")
+```
+
+
+# Quality of Place
+
+```{r}
+qp_data_fips <- read_excel("glp_codebook.xlsx", sheet = "QOP County")
+qp_data_msa <- read_excel("glp_codebook.xlsx", sheet = "QOP MSA")
+qp_data_fips$pct_pop_core_county <- as.numeric(qp_data_fips$pct_pop_core_county)
+qp_data_fips$year <- as.numeric(qp_data_fips$year)
+```
+
+### Population living in Core County
+```{r}
+graph_trendline(
+  qp_data_fips,
+  "pct_pop_core_county",
+  plot_title = "Percent Population Living in Core MSA County",
+  caption_text = "Source: Greater Louisville Project\nData frome US Census Bureau, MSA",
+  xmin = 2010,
+  xmax = 2015,
+  newest_year = 2015,
+  oldest_year = 2010)
+```
+
+### Volunteer Rate
+```{r}
+graph_trendline(
+  qp_data_msa,
+  var = "volunteer_pct",
+  xmin = 2011,
+  xmax = 2014,
+  oldest_year = 2011,
+  newest_year = 2014,
+  plot_title = "Volunteer Rate",
+  caption_text = "Source: Greater Louisville Project\nData from the Corporation for National and Community Service\nMSA Groupings are 2003 OMB standards")
+```
+
+### Net Migration Flow
+```{r}
+qp_data_fips$net_migration_flow <- as.numeric(qp_data_fips$net_migration_flow)
+
+graph_trendline(
+  qp_data_fips, 
+  var = 'net_migration_flow', 
+  plot_title = "Net Migration Flow",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED",
+  xmin = 2009, 
+  xmax = 2013,
+  newest_year = 2013,
+  oldest_year = 2009)
+```
+
+### Burdened Households
+```{r}
+qp_data_fips$burdened_households <- as.numeric(qp_data_fips$burdened_households)
+
+graph_trendline(
+  qp_data_fips, 
+  var = 'burdened_households', 
+  plot_title = "Burdened Households",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED",
+  xmin = 2010, 
+  xmax = 2015,
+  newest_year = 2015,
+  oldest_year = 2010)
+```
+
+### Housing Price Index
+```{r}
+qp_data_fips$housing_price_index <- as.numeric(qp_data_fips$housing_price_index)
+
+graph_trendline(
+  qp_data_fips, 
+  var = 'housing_price_index', 
+  plot_title = "Housing Price Index",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED",
+  xmin = 2009,
+  xmax = 2015,
+  newest_year = 2015,
+  oldest_year = 2009)
+```
+
+### Homeownership
+
+```{r}
+qp_data_fips$home_ownership <- as.numeric(qp_data_fips$home_ownership)
+graph_trendline(
+  qp_data_fips, 
+  var = 'home_ownership', 
+  plot_title = "Homeownership",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED",
+  xmin = 2009, 
+  xmax = 2015,
+  oldest_year = 2009)
+
+```
+
+### Disconnected Youth
+
+```{r}
+qp_data_fips$disconnected_youth <- as.numeric(qp_data_fips$disconnected_youth)
+graph_trendline(
+  as.data.frame(qp_data_fips),
+  var = 'disconnected_youth',
+  plot_title = "Disconnected Youth",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED", 
+  xmin = 2009, 
+  xmax = 2015,
+  oldest_year = 2009)
+
+```
+
+### Racial Dissimilarity Index
+```{r}
+qp_data_fips$racial_geography <- as.numeric(qp_data_fips$racial_geography)
+graph_trendline(
+  as.data.frame(qp_data_fips), 
+  var = 'racial_geography', 
+  plot_title = "Racial Dissimilarity Index",
+  caption_text = "Source: Greater Louisville Project \nData from the Federal Reserve via GeoFRED",
+  xmin = 2009, 
+  xmax = 2015,
+  oldest_year = 2009)
+```
+
+```{r}
+showtext.auto(FALSE)
+```
+
+
+
+# Notes
+
+- Data is downloaded from our website. I'll have to update with a more complete dataset in the future.
+    - There are some indicators for which I believe Harrison has newer data. 
+    - There are also some indicators that aren't up on the website.
+    - We could keep the most up-to-date version as a google sheet. Harrison and I will coordinate on a system for adding new data to the tidy dataset for coding projects. 
+- There is an issue with the legends not being sized correctly. They work well when making image files, the issue is with the display inside the html document. I've put them to the left and removed the y-axis labels for now. 
+- I didn't use any rolling means because for _internal_ discussion I think it's best to show how noisy the data is from end to end.
